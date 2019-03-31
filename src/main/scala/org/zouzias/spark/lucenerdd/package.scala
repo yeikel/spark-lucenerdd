@@ -20,6 +20,7 @@ import org.apache.lucene.document._
 import org.apache.spark.sql.Row
 import org.zouzias.spark.lucenerdd.config.LuceneRDDConfigurable
 
+import scala.collection.mutable
 import scala.reflect.ClassTag
 
 package object lucenerdd extends LuceneRDDConfigurable {
@@ -135,6 +136,13 @@ package object lucenerdd extends LuceneRDDConfigurable {
       case x: Double if x != null =>
         doc.add(new DoublePoint(fieldName, x))
         doc.add(new StoredField(fieldName, x))
+      case x: mutable.WrappedArray[String] =>
+        x.foreach(e => {
+          doc.add(new Field(fieldName, e,
+            analyzedField(isAnalyzedField(fieldName)))
+          )
+          doc.add(new StoredField(fieldName, e))
+        })
       case _ => Unit
     }
     doc
@@ -181,11 +189,12 @@ package object lucenerdd extends LuceneRDDConfigurable {
     val doc = new Document
 
     val fieldNames = row.schema.fieldNames
-    fieldNames.foreach{ case fieldName =>
+    fieldNames.foreach { fieldName =>
       val index = row.fieldIndex(fieldName)
       typeToDocument(doc, fieldName, row.get(index))
     }
 
+    //printf("Created document %s %n" , doc)
     doc
   }
 }

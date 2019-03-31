@@ -16,40 +16,67 @@
  */
 package org.zouzias.spark.lucenerdd.models
 
+import java.io
+
 import org.apache.lucene.document.Document
+
 import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 /**
- * Wrapper around Lucene document
- *
- * If [[Document]] were serializable, this class would not exist.
- *
- * @param doc Lucene document
- */
+  * Wrapper around Lucene document
+  *
+  * If [[Document]] were serializable, this class would not exist.
+  *
+  * @param doc Lucene document
+  */
 class SparkDoc(doc: Document) extends Serializable {
 
   private val numberFields: Map[String, Number] = doc.getFields().asScala
-    .flatMap( field =>
-    if (field.numericValue() != null && field.name() != null) {
-      Some((field.name(), field.numericValue()))
-    }
-    else {
-      None
-    }
-  ).toMap[String, Number]
-
-  private val stringFields: Map[String, String] = doc.getFields().asScala
-    .flatMap( field =>
-      if (field.name() != null &&
-        field.stringValue() != null &&
-        !numberFields.keySet.contains(field.name())) {
-        // add if not contained in numeric fields
-        Some((field.name(), field.stringValue()))
+    .flatMap(field =>
+      if (field.numericValue() != null && field.name() != null) {
+        Some((field.name(), field.numericValue()))
       }
       else {
         None
       }
-    ).toMap[String, String]
+    ).toMap[String, Number]
+
+  private val stringFields: Map[String, ArrayBuffer[String]] = {
+
+    var results = Map[String, mutable.ArrayBuffer[String]]()
+
+    val res: Unit = doc.getFields().asScala
+      .flatMap(field =>
+        if (field.name() != null &&
+          field.stringValue() != null &&
+          !numberFields.keySet.contains(field.name())) {
+          // add if not contained in numeric fields
+
+          Some((field.name(), field.stringValue()))
+        }
+        else {
+          None
+        }
+      ).distinct.foreach(s => {
+
+      val key = s._1
+      val value = s._2
+
+      if (results.contains(key)) {
+        results(key) += value
+      } else {
+        val el = mutable.ArrayBuffer[String](value)
+        results += (key -> el)
+      }
+
+
+    })
+
+
+    results
+  }
 
   def getFields: Set[String] = {
     getTextFields ++ getNumericFields
@@ -67,9 +94,19 @@ class SparkDoc(doc: Document) extends Serializable {
     numberFields.getOrElse(fieldName, stringFields.getOrElse(fieldName, Nil))
   }
 
-  def textField(fieldName: String): Option[String] = {
+  def textField(fieldName: String): Option[ArrayBuffer[String]] = {
     stringFields.get(fieldName)
   }
+
+  def textFieldSingle(fieldName: String): String = {
+    if ( stringFields.contains(fieldName) && stringFields(fieldName)!= null && stringFields(fieldName).nonEmpty) {
+      stringFields(fieldName)(0)
+    } else {
+      null
+    }
+
+  }
+
 
   def numericField(fieldName: String): Option[Number] = {
     numberFields.get(fieldName)
@@ -77,7 +114,7 @@ class SparkDoc(doc: Document) extends Serializable {
 
   override def toString: String = {
     val builder = new StringBuilder
-    if ( numberFields.nonEmpty) builder.append("Numeric fields:")
+    if (numberFields.nonEmpty) builder.append("Numeric fields:")
     numberFields.foreach { case (name, value) =>
       builder.append(s"$name:[${value}]")
     }
