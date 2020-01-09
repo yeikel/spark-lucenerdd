@@ -142,9 +142,6 @@ lazy val root = (project in file(".")).
     buildInfoPackage := "org.zouzias.spark.lucenerdd"
 )
 
-lazy val compileScalastyle = taskKey[Unit]("compileScalastyle")
-compileScalastyle := scalastyle.in(Compile).toTask("").value
-(compile in Compile) := ((compile in Compile) dependsOn compileScalastyle).value
 
 parallelExecution in Test := false
 
